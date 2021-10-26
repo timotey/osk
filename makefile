@@ -23,10 +23,10 @@ CFLAGS=O0 ggdb std=c++20
 LFLAGS=
 
 # put the libraries you want to link against here, -l prefix is assued
-LIBS=X11 GLX GLEW GLU GL glfw pthread
+LIBS=X11 GLX GLEW GLU GL glfw freetype
 
 # here are the auxiliary library and header paths
-PATH_INCS=src
+PATH_INCS=src /usr/include/freetype2
 PATH_LIBS=
 PATH_DLIB=
 
