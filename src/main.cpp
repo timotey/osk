@@ -8,7 +8,9 @@
 #include<glm/glm.hpp>
 #include<ft2build.h>
 #include FT_FREETYPE_H
+#include"algo.hpp"
 #include"mdspan.hpp"
+#include"mdvec.hpp"
 
 struct box{
     glm::vec2 begin;
@@ -77,13 +79,21 @@ void draw_pad(auto angle, auto extent){
     }
 }
 
-int main(){
+mdvec<uint32_t, 2> make_charmap(mdspan<char, 2> charmap, size_t cellsize){
     FT_Library freetype;
     FT_Face face;
     if(auto error = FT_Init_FreeType(&freetype)) return -1; //set up freetype
     defer ft{[&]{FT_Done_FreeType(freetype);}}; //set up a destructor for freetype
     if(auto error = FT_New_Face(freetype, "/usr/share/fonts/TTF/FiraSans-Bold.ttf", 0, &face)) return -error;
     defer ff{[&]{FT_Done_Face(face);}};
+    mdvec<uint32_t, 2>ret (charmap.size(0)*cellsize, charmap.size(1)*cellsize);
+    for (auto [x,i]:enumerate(charmap))
+        for (auto [v,j]:enumerate(x)){
+            auto ss = ret.subspan({i*cellsize,j*cellsize}, {(i+1)*cellsize, (j+1)*cellsize});
+        }
+}
+
+int main(){
     if(!glfwInit())return -1; //set up glfw
     defer d{glfwTerminate}; //set up a destructor for glfw
 
