@@ -8,6 +8,7 @@
 #include<glm/glm.hpp>
 #include<ft2build.h>
 #include FT_FREETYPE_H
+#include"mdspan.hpp"
 
 struct box{
     glm::vec2 begin;
@@ -30,8 +31,6 @@ glm::vec2 polar(glm::vec2 cart){
 
 float ar = 0.5;
 double const pi = 3.14592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282;
-
-void create_atlas(uint32_t** array, size_t width, size_t height, )
 
 void draw_trapezoid(box place, box texture[2], float progress){
     auto unitl = glm::vec2(std::cos(place.begin.y), std::sin(place.begin.y)); //create a unit vector for the start position
