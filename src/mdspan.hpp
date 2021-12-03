@@ -74,10 +74,25 @@ class mdspan{
         return sizes[i];
     }
     mdspan& operator=(mdspan const& other){
-        for (size_t i = std::min(sizes.back(), other.sizes.back()); i; --i){
-            (*this)[i] = other[i];
+        size_t i = std::min(sizes.back(), other.sizes.back());
+        for (size_t x = 0; x < i; ++x){
+            (*this)[x] = other[x];
         }
         return *this;
+    }
+    mdspan_iterator<T, dim-1> begin()const{
+        auto cast = []<class T1, size_t D>(std::array<T1, D>const& x)
+            ->std::array<T1, D - 1>{
+            std::array<T1, D - 1> ret;
+            std::copy(x.begin(), x.end()-1, ret.begin());
+            return ret;
+        };
+        return mdspan_iterator{mdspan<T,dim-1>{
+            .strides=cast(strides),
+            .sizes=cast(sizes),
+            .offsets=cast(offsets),
+            .data = data+(offsets.back())*strides.back()
+        }, strides.back()};
     }
     mdspan_iterator<T, dim-1> begin(){
         auto cast = []<class T1, size_t D>(std::array<T1, D>const& x)
@@ -93,6 +108,20 @@ class mdspan{
             .data = data+(offsets.back())*strides.back()
         }, strides.back()};
     }
+    mdspan_iterator<T, dim-1> end()const{
+        auto cast = []<class T1, size_t D>(std::array<T1, D>const& x)
+            ->std::array<T1, D - 1>{
+            std::array<T1, D - 1> ret;
+            std::copy(x.begin(), x.end()-1, ret.begin());
+            return ret;
+        };
+        return {mdspan<T,dim-1>{
+            .strides=cast(strides),
+            .sizes=cast(sizes),
+            .offsets=cast(offsets),
+            .data = data+(offsets.back()+sizes.back())*strides.back()
+        },strides.back()};
+    }
     mdspan_iterator<T, dim-1> end(){
         auto cast = []<class T1, size_t D>(std::array<T1, D>const& x)
             ->std::array<T1, D - 1>{
@@ -106,6 +135,9 @@ class mdspan{
             .offsets=cast(offsets),
             .data = data+(offsets.back()+sizes.back())*strides.back()
         },strides.back()};
+    }
+    mdspan<T, dim-1> operator[](size_t idx)const{
+        return *(begin()+idx);
     }
     mdspan<T, dim-1> operator[](size_t idx){
         return *(begin()+idx);
@@ -126,7 +158,7 @@ class mdspan{
         auto idx = (f(idxs) +...+ 0);
         return data[idx];
     }
-    mdspan subspan(std::initializer_list<size_t> starts, std::initializer_list<size_t> ends){
+    mdspan subspan(std::initializer_list<size_t> starts, std::initializer_list<size_t> ends) const{
         mdspan ret;
         ret.strides = this->strides;
         ret.data = this->data;
@@ -138,7 +170,7 @@ class mdspan{
             auto ibegin = starts.begin();
             auto iend   = starts.end();
             for (; rbegin!=rend && ibegin != iend; ++rbegin, ++ibegin, ++tbegin)
-                *rbegin = std::max(*ibegin, tbegin);
+                *rbegin = std::max(*ibegin, *tbegin);
             std::copy(tbegin, tend, rbegin); // copy the rest of elements from our starting array so we don't get junk
         }{
             auto rbegin = ret.sizes.begin();
@@ -148,7 +180,7 @@ class mdspan{
             auto ibegin = ends.begin();
             auto iend   = ends.end();
             for (; rbegin!=rend && ibegin != iend; ++rbegin, ++ibegin, ++tbegin)
-                *rbegin = std::min(*ibegin, tbegin);
+                *rbegin = std::min(*ibegin, *tbegin);
             std::copy(tbegin, tend, rbegin); // copy the rest of elements from our starting array so we don't get junk
         }
         return ret;
@@ -166,20 +198,31 @@ class mdspan<T,1>{
         return sizes[i];
     }
     mdspan& operator=(mdspan const& other){
-        std::copy(
-            other.data+other.offsets[0],
-            other.data+other.offsets[0]+std::min(other.sizes[0], this->sizes[0]),
-            this->data+this->offsets[0]
-        );
+        size_t i = std::min(sizes.back(), other.sizes.back());
+        for (size_t x = 0; x < i; ++x){
+            (*this)[x] = other[x];
+        }
         return *this;
+        //std::copy(
+        //    other.data+other.offsets[0],
+        //    other.data+other.offsets[0]+std::min(other.sizes[0], this->sizes[0]),
+        //    this->data+this->offsets[0]
+        //);
+        //return *this;
+    }
+    T const* begin() const{
+        return data+offsets[0];
     }
     T* begin(){
         return data+offsets[0];
     }
-    T* end(){
+    T const* end() const{
         return data+offsets[0]+sizes[0];
     }
     T& operator[](size_t idx){
+        return *(begin()+idx);
+    }
+    T const& operator[](size_t idx)const{
         return *(begin()+idx);
     }
     T const& operator()(std::same_as<size_t> auto idxs) const{

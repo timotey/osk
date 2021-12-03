@@ -1,6 +1,7 @@
 #include<utility>
 #include<stdexcept>
 #include<iostream>
+#include<fstream>
 #include<array>
 #include<cmath>
 #include<GL/glew.h>
@@ -34,7 +35,7 @@ glm::vec2 polar(glm::vec2 cart){
 float ar = 0.5;
 double const pi = 3.14592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282;
 
-void draw_trapezoid(box place, box texture[2], float progress){
+void draw_trapezoid(box place, box, box, float progress){
     auto unitl = glm::vec2(std::cos(place.begin.y), std::sin(place.begin.y)); //create a unit vector for the start position
     auto unitr = glm::vec2(std::cos(place.end  .y), std::sin(place.end  .y)); //create a unit vector for the end position
     auto midpoint = std::lerp(place.begin.x, place.end.x, progress); //determine the midpoint for our transitions
@@ -60,13 +61,15 @@ void draw_trapezoid(box place, box texture[2], float progress){
     //|/   |
     //5----6
     for (size_t i = 0; i < 6; ++i){
-        glColor3f(i&1?1.0:0.0, i&2?1.0:0.0,i&4?1.0:0.0);
-        glVertex3f(points[i].x, points[i].y,0.5);
+        //glColor3f(i&1?1.0:0.0, i&2?1.0:0.0,i&4?1.0:0.0);
+        glTexCoord2f(i&1?1.0:0.0, i&2?0.0:1.0);
+        glVertex3f(points[i].x, points[i].y, 0.11
+                );
     }
     glEnd();
 }
 
-void draw_pad(auto angle, auto extent){
+void draw_pad(auto angle, auto extent, float shift){
     auto upfn = [](auto val, int phase){
         auto x = fmod(2*pi+val-decltype(val)(phase)*pi/4,2*pi);
         return std::max(decltype(x)(0),std::min(decltype(x)(1),std::min(pi*x, -pi*x+pi*pi/3)));
@@ -75,26 +78,52 @@ void draw_pad(auto angle, auto extent){
         auto a = 1.0+0.2*upfn(angle, (i-1)/2)*extent;
         auto begin = pi/8.0*double(i)+0.05;
         auto end = pi/8.0*double(i+2)-0.05;
-        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, {},0.5);
+        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, {}, {}, shift);
     }
 }
 
-mdvec<uint32_t, 2> make_charmap(mdspan<char, 2> charmap, size_t cellsize){
+mdvec<unsigned char, 2> make_charmap(mdspan<char, 2> charmap, size_t cellsize){
     FT_Library freetype;
     FT_Face face;
-    if(auto error = FT_Init_FreeType(&freetype)) return -1; //set up freetype
-    defer ft{[&]{FT_Done_FreeType(freetype);}}; //set up a destructor for freetype
-    if(auto error = FT_New_Face(freetype, "/usr/share/fonts/TTF/FiraSans-Bold.ttf", 0, &face)) return -error;
-    defer ff{[&]{FT_Done_Face(face);}};
-    mdvec<uint32_t, 2>ret (charmap.size(0)*cellsize, charmap.size(1)*cellsize);
-    for (auto [x,i]:enumerate(charmap))
-        for (auto [v,j]:enumerate(x)){
-            auto ss = ret.subspan({i*cellsize,j*cellsize}, {(i+1)*cellsize, (j+1)*cellsize});
+    if(auto error = FT_Init_FreeType(&freetype)) throw std::runtime_error("could not initialize freetype"); //set up freetype
+    //defer ft{[&]{FT_Done_FreeType(freetype);}}; //set up a destructor for freetype
+    if(auto error = FT_New_Face(freetype, "/usr/share/fonts/TTF/FiraSans-Bold.ttf", 0, &face)) throw std::runtime_error("could not load font");
+    //defer ff{[&]{FT_Done_Face(face);}};
+    if(FT_Set_Pixel_Sizes(face, (FT_UInt)cellsize, (FT_UInt)cellsize)) throw std::runtime_error("could not se pixel size");
+    mdvec<unsigned char, 2>ret (charmap.size(0)*cellsize, charmap.size(1)*cellsize);
+    size_t i=0, j=0;
+    for (auto x:charmap){
+        for (auto v:x){
+            auto ss = ret.subspan({i*cellsize,j*cellsize}, {(i+1)*cellsize,(j+1)*cellsize});
+            auto glyph_idx = FT_Get_Char_Index(face, v);
+            if(FT_Load_Glyph(face, glyph_idx, FT_LOAD_RENDER)) throw std::runtime_error("could not load glyph");
+            //face->glyph->format = FT_GLYPH_FORMAT_BITMAP;
+            //face->glyph->bitmap_left=cellsize/2;
+            //face->glyph->bitmap_top =cellsize/2;
+            if(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) throw std::runtime_error("Could not render glyph");
+            auto bmp = face->glyph->bitmap;
+            const mdspan<unsigned char,2> src{
+                .strides={1, bmp.pitch},
+                .sizes={bmp.width, bmp.rows},
+                .offsets={},
+                .data=bmp.buffer,
+            };
+            ss = src;
+            i++;
         }
+        j++;
+    }
+    return ret;
 }
 
 int main(){
     if(!glfwInit())return -1; //set up glfw
+    std::string buf;
+    std::ifstream db("controllerdb.txt");
+    std::copy(std::istream_iterator<char>(db),
+            std::istream_iterator<char>(),
+            std::back_inserter(buf));
+    glfwUpdateGamepadMappings(buf.c_str());
     defer d{glfwTerminate}; //set up a destructor for glfw
 
     //window setup
@@ -103,31 +132,71 @@ int main(){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     GLFWwindow* window = glfwCreateWindow(640,320, "TEST", NULL, NULL);
-    glfwSetFramebufferSizeCallback(window, [](auto, int a, int b){ar = float(b)/float(a);glViewport(0,0,a,b);});
+    glfwSetFramebufferSizeCallback(window, [](auto, int a, int b){
+        ar = float(b)/float(a);glViewport(0,0,a,b);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glScalef(ar, 1,1);
+        //glFrustum(-1,1,-1,1,0.1,2);
+        glMatrixMode(GL_MODELVIEW);
+    });
     if(!window) return -1;
     glfwMakeContextCurrent(window);
     auto err = glewInit();
     if(err!=GLEW_OK) throw std::runtime_error(reinterpret_cast<const char *>(glewGetErrorString(err)));
-    glEnable(GL_COLOR_MATERIAL);
+    //glEnable(GL_COLOR_MATERIAL);
+    glEnable( GL_TEXTURE_2D );
+    char* a = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    mdspan<char,2> cmap{
+        .strides={1,8},
+        .sizes={8,8},
+        .offsets={},
+        .data=a,
+    };
+    auto map = make_charmap(cmap, 64);
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glBindTexture( GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, int(map.size(0)), int(map.size(1)), 0, GL_RED, GL_UNSIGNED_BYTE, map.data);
+
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+
+    int gamepad;
+    for(gamepad=0;gamepad < GLFW_JOYSTICK_LAST; ++gamepad)
+        if (glfwJoystickIsGamepad(gamepad))break;
     
+    glMatrixMode(GL_PROJECTION);
+    glScalef(ar, 1,1);
+    //glFrustum(-1,1,-1,1,0.1,100);
+    glMatrixMode(GL_MODELVIEW);
     while(!glfwWindowShouldClose(window)){
-        glLoadIdentity();
-        glScalef(ar, 1, 1);
+        glfwPollEvents();
         GLFWgamepadstate state;
-        if(glfwGetGamepadState(GLFW_JOYSTICK_1, &state)){
+        if(glfwJoystickPresent(gamepad)){
+            if(glfwGetGamepadState(gamepad, &state));
             auto left = polar({state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],  -state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]});
             auto right= polar({state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], -state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]});
             glPushMatrix();
             glTranslated(-1, 0.0, 0.0);
-            draw_pad(left.y, left.x);
+            draw_pad(left.y,  left.x,  std::fmod(right.y/(2*pi)*8+8, 1.0f));
             glPopMatrix();
             glPushMatrix();
             glTranslated(1, 0.0, 0.0);
-            draw_pad(right.y, right.x);
+            draw_pad(right.y, right.x, std::fmod(left.y/(2*pi)*8+8, 1.0f));
             glPopMatrix();
+        }else{
+            glBegin(GL_TRIANGLE_STRIP);
+            glVertex3d(1.0, 1.0, 0.5);
+            glVertex3d(-1.0, 1.0, 0.5);
+            glVertex3d(0.0,0.0,0.5);
+            glEnd();
         }
         glfwSwapBuffers(window);
         glClear(GL_COLOR_BUFFER_BIT);
-        glfwPollEvents();
     }
 }

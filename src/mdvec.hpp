@@ -30,7 +30,7 @@ struct mdvec:mdspan<T, rank> {
             .strides = other.strides,
             .sizes   = other.sizes,
             .offsets = other.offsets,
-            .data=std::exchange(other.data, 0)
+            .data=std::exchange(other.data, nullptr)
             }){
         this->data = new T[this->strides.back()*this->sizes.back()];
         static_cast<mdspan<T, rank>&>(*this) = other;

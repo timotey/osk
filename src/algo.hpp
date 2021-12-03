@@ -3,7 +3,7 @@
 #include<utility>
 template<class T>
 struct enumerate {
-    T c;
+    T& c;
         struct it{
             decltype(c.begin()) it;
             std::size_t ctr=0;
