@@ -35,7 +35,7 @@ glm::vec2 polar(glm::vec2 cart){
 float ar = 0.5;
 double const pi = 3.14592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282;
 
-void draw_trapezoid(box place, box, box, float progress){
+void draw_trapezoid(box place, box tex, box alt, float progress){
     auto unitl = glm::vec2(std::cos(place.begin.y), std::sin(place.begin.y)); //create a unit vector for the start position
     auto unitr = glm::vec2(std::cos(place.end  .y), std::sin(place.end  .y)); //create a unit vector for the end position
     auto midpoint = std::lerp(place.begin.x, place.end.x, progress); //determine the midpoint for our transitions
@@ -47,7 +47,6 @@ void draw_trapezoid(box place, box, box, float progress){
         unitl*place.begin.x, //an lower-left point
         unitr*place.begin.x, //an lower-right point
     };
-    glBegin(GL_TRIANGLE_STRIP);
     //creating a 2-square strip:
     //1----2
     //|   /|
@@ -60,25 +59,38 @@ void draw_trapezoid(box place, box, box, float progress){
     //| /  |
     //|/   |
     //5----6
-    for (size_t i = 0; i < 6; ++i){
-        //glColor3f(i&1?1.0:0.0, i&2?1.0:0.0,i&4?1.0:0.0);
-        glTexCoord2f(i&1?1.0:0.0, i&2?0.0:1.0);
-        glVertex3f(points[i].x, points[i].y, 0.11
-                );
-    }
+    glBegin(GL_TRIANGLE_STRIP);
+    glTexCoord2f(tex.begin.y, tex.begin.y);
+    glVertex3f(points[0].x, points[0].y, 0.11);
+    glTexCoord2f(tex.begin.y, tex.end.y);
+    glVertex3f(points[1].x, points[1].y, 0.11);
+    glTexCoord2f(tex.end.y, tex.begin.y);
+    glVertex3f(points[2].x, points[2].y, 0.11);
+    glTexCoord2f(tex.end.y, tex.end.y);
+    glVertex3f(points[3].x, points[3].y, 0.11);
+    glEnd();
+    glBegin(GL_TRIANGLE_STRIP);
+    glTexCoord2f(alt.end.y, alt.begin.y);
+    glVertex3f(points[2].x, points[2].y, 0.11);
+    glTexCoord2f(alt.end.y, alt.end.y);
+    glVertex3f(points[3].x, points[3].y, 0.11);
+    glTexCoord2f(alt.end.y, alt.begin.y);
+    glVertex3f(points[4].x, points[4].y, 0.11);
+    glTexCoord2f(alt.end.y, alt.end.y);
+    glVertex3f(points[5].x, points[5].y, 0.11);
     glEnd();
 }
 
-void draw_pad(auto angle, auto extent, float shift){
-    auto upfn = [](auto val, int phase){
-        auto x = fmod(2*pi+val-decltype(val)(phase)*pi/4,2*pi);
+void draw_pad(float angle, float extent, float shift, mdspan<box,1> tex, mdspan<box,1> alt){
+    auto upfn = [&](auto val, int phase){
+        auto x = fmod(2*pi+val-decltype(val)(phase)*pi*2/tex.size(0),2*pi);
         return std::max(decltype(x)(0),std::min(decltype(x)(1),std::min(pi*x, -pi*x+pi*pi/3)));
     };
-    for(int i = 1; i < 17; i+=2){
-        auto a = 1.0+0.2*upfn(angle, (i-1)/2)*extent;
-        auto begin = pi/8.0*double(i)+0.05;
-        auto end = pi/8.0*double(i+2)-0.05;
-        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, {}, {}, shift);
+    for(int i = 0; i < tex.size(0); i++){
+        auto a = 1.0+0.2*upfn(angle, i)*extent;
+        auto begin = pi/tex.size(0)*double(2*i+1)+0.05;
+        auto end   = pi/tex.size(0)*double(2*i+3)-0.05;
+        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, tex[i], alt[i], 0.0);
     }
 }
 
@@ -86,9 +98,9 @@ mdvec<unsigned char, 2> make_charmap(mdspan<char, 2> charmap, size_t cellsize){
     FT_Library freetype;
     FT_Face face;
     if(auto error = FT_Init_FreeType(&freetype)) throw std::runtime_error("could not initialize freetype"); //set up freetype
-    //defer ft{[&]{FT_Done_FreeType(freetype);}}; //set up a destructor for freetype
+    defer ft{[&]{FT_Done_FreeType(freetype);}}; //set up a destructor for freetype
     if(auto error = FT_New_Face(freetype, "/usr/share/fonts/TTF/FiraSans-Bold.ttf", 0, &face)) throw std::runtime_error("could not load font");
-    //defer ff{[&]{FT_Done_Face(face);}};
+    defer ff{[&]{FT_Done_Face(face);}};
     if(FT_Set_Pixel_Sizes(face, (FT_UInt)cellsize, (FT_UInt)cellsize)) throw std::runtime_error("could not se pixel size");
     mdvec<unsigned char, 2>ret (charmap.size(0)*cellsize, charmap.size(1)*cellsize);
     size_t i=0, j=0;
@@ -146,14 +158,19 @@ int main(){
     if(err!=GLEW_OK) throw std::runtime_error(reinterpret_cast<const char *>(glewGetErrorString(err)));
     //glEnable(GL_COLOR_MATERIAL);
     glEnable( GL_TEXTURE_2D );
-    char* a = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    mdspan<char,2> cmap{
+    char a[] = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const mdspan<char,2> cmap{
         .strides={1,8},
         .sizes={8,8},
         .offsets={},
         .data=a,
     };
     auto map = make_charmap(cmap, 64);
+    mdvec<box, 2> texs{8,8};
+    for(size_t i = 0; i < 8; ++i)
+    for(size_t k = 0; k < 8; ++k)
+        texs[k][i] = box{{i/8.0, k/8.0}, {(i+1)/8.0, (k+1)/8.0}};
+
     GLuint tex;
     glGenTextures(1, &tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -179,15 +196,17 @@ int main(){
         GLFWgamepadstate state;
         if(glfwJoystickPresent(gamepad)){
             if(glfwGetGamepadState(gamepad, &state));
-            auto left = polar({state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],  -state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]});
-            auto right= polar({state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], -state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]});
+            auto left  = polar({state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],  -state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]});
+            auto right = polar({state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], -state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]});
+            auto ratio_r = right.y/(2*pi)*8+4;
+            auto ratio_l = left.y /(2*pi)*8+4;
             glPushMatrix();
             glTranslated(-1, 0.0, 0.0);
-            draw_pad(left.y,  left.x,  std::fmod(right.y/(2*pi)*8+8, 1.0f));
+            draw_pad(left.y,  left.x,  std::fmod(ratio_r, 1.0f), texs[size_t(ratio_r)], texs[(size_t(ratio_r)+1)%8]);
             glPopMatrix();
             glPushMatrix();
             glTranslated(1, 0.0, 0.0);
-            draw_pad(right.y, right.x, std::fmod(left.y/(2*pi)*8+8, 1.0f));
+            draw_pad(right.y, right.x, std::fmod(ratio_l, 1.0f), texs[size_t(ratio_l)], texs[size_t(ratio_l)]);
             glPopMatrix();
         }else{
             glBegin(GL_TRIANGLE_STRIP);
