@@ -1,6 +1,7 @@
 #include<utility>
 #include<stdexcept>
 #include<iostream>
+#include<iomanip>
 #include<fstream>
 #include<array>
 #include<cmath>
@@ -60,24 +61,16 @@ void draw_trapezoid(box place, box tex, box alt, float progress){
     //|/   |
     //5----6
     glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2f(tex.begin.y, tex.begin.y);
-    glVertex3f(points[0].x, points[0].y, 0.11);
-    glTexCoord2f(tex.begin.y, tex.end.y);
-    glVertex3f(points[1].x, points[1].y, 0.11);
-    glTexCoord2f(tex.end.y, tex.begin.y);
-    glVertex3f(points[2].x, points[2].y, 0.11);
-    glTexCoord2f(tex.end.y, tex.end.y);
-    glVertex3f(points[3].x, points[3].y, 0.11);
+    glTexCoord2f(tex.begin.x, tex.end  .y); glVertex3f(points[0].x, points[0].y, 0.11);
+    glTexCoord2f(tex.end  .x, tex.end  .y); glVertex3f(points[1].x, points[1].y, 0.11);
+    glTexCoord2f(tex.begin.x, tex.begin.y); glVertex3f(points[2].x, points[2].y, 0.11);
+    glTexCoord2f(tex.end  .x, tex.begin.y); glVertex3f(points[3].x, points[3].y, 0.11);
     glEnd();
     glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2f(alt.end.y, alt.begin.y);
-    glVertex3f(points[2].x, points[2].y, 0.11);
-    glTexCoord2f(alt.end.y, alt.end.y);
-    glVertex3f(points[3].x, points[3].y, 0.11);
-    glTexCoord2f(alt.end.y, alt.begin.y);
-    glVertex3f(points[4].x, points[4].y, 0.11);
-    glTexCoord2f(alt.end.y, alt.end.y);
-    glVertex3f(points[5].x, points[5].y, 0.11);
+    glTexCoord2f(alt.begin.x, alt.end  .y); glVertex3f(points[2].x, points[2].y, 0.11);
+    glTexCoord2f(alt.end  .x, alt.end  .y); glVertex3f(points[3].x, points[3].y, 0.11);
+    glTexCoord2f(alt.begin.x, alt.begin.y); glVertex3f(points[4].x, points[4].y, 0.11);
+    glTexCoord2f(alt.end  .x, alt.begin.y); glVertex3f(points[5].x, points[5].y, 0.11);
     glEnd();
 }
 
@@ -90,7 +83,10 @@ void draw_pad(float angle, float extent, float shift, mdspan<box,1> tex, mdspan<
         auto a = 1.0+0.2*upfn(angle, i)*extent;
         auto begin = pi/tex.size(0)*double(2*i+1)+0.05;
         auto end   = pi/tex.size(0)*double(2*i+3)-0.05;
-        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, tex[i], alt[i], 0.0);
+        draw_trapezoid({{0.4*a, begin}, {0.7*a, end}}, tex[i], alt[i], shift);
+        for(auto v: tex)
+            std::cout << std::fixed << std::setw(5) << v.begin.x << ' ' << v.begin.y << ", ";
+        std::cout << '\n';
     }
 }
 
@@ -166,10 +162,14 @@ int main(){
         .data=a,
     };
     auto map = make_charmap(cmap, 64);
-    mdvec<box, 2> texs{8,8};
+    mdvec<box, 2> texsl{8,8};
     for(size_t i = 0; i < 8; ++i)
     for(size_t k = 0; k < 8; ++k)
-        texs[k][i] = box{{i/8.0, k/8.0}, {(i+1)/8.0, (k+1)/8.0}};
+        texsl[k][i] = box{{i/8.0, k/8.0}, {(i+1)/8.0, (k+1)/8.0}};
+    mdvec<box, 2> texsr{8,8};
+    for(size_t i = 0; i < 8; ++i)
+    for(size_t k = 0; k < 8; ++k)
+        texsr[i][k] = box{{i/8.0, k/8.0}, {(i+1)/8.0, (k+1)/8.0}};
 
     GLuint tex;
     glGenTextures(1, &tex);
@@ -198,15 +198,15 @@ int main(){
             if(glfwGetGamepadState(gamepad, &state));
             auto left  = polar({state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],  -state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]});
             auto right = polar({state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], -state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]});
-            auto ratio_r = right.y/(2*pi)*8+4;
-            auto ratio_l = left.y /(2*pi)*8+4;
+            auto ratio_r = std::fmod(right.y/(2*pi)*8+7, 8.0);
+            auto ratio_l = std::fmod(left.y /(2*pi)*8+7, 8.0);
             glPushMatrix();
             glTranslated(-1, 0.0, 0.0);
-            draw_pad(left.y,  left.x,  std::fmod(ratio_r, 1.0f), texs[size_t(ratio_r)], texs[(size_t(ratio_r)+1)%8]);
+            draw_pad(left.y,  left.x,  std::fmod(ratio_r, 1.0f), texsl[size_t(ratio_r)], texsl[(size_t(ratio_r)+1)%8]);
             glPopMatrix();
             glPushMatrix();
             glTranslated(1, 0.0, 0.0);
-            draw_pad(right.y, right.x, std::fmod(ratio_l, 1.0f), texs[size_t(ratio_l)], texs[size_t(ratio_l)]);
+            draw_pad(right.y, right.x, std::fmod(ratio_l, 1.0f), texsr[size_t(ratio_l)], texsr[(size_t(ratio_l)+1)%8]);
             glPopMatrix();
         }else{
             glBegin(GL_TRIANGLE_STRIP);
