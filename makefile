@@ -11,8 +11,8 @@ LD=g++
 
 # put your warnings here, -W preffix is assumed
 WARNS := all extra shadow non-virtual-dtor old-style-cast cast-align
-WARNS += unused overloaded-virtual pedantic conversion
-WARNS += misleading-indentation null-dereference double-promotion
+WARNS += unused overloaded-virtual pedantic conversion no-deprecated-copy
+WARNS += misleading-indentation null-dereference 
 WARNS += format=2 no-conversion
 
 # here lie all your macro definitions, -D prefix is assumed

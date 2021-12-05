@@ -2,7 +2,7 @@
 #define MDSPAN_HPP__
 #include<array>
 #include<cstddef>
-#include<ranges>
+
 template<class T, size_t rank>
 class mdspan;
 template<class T, size_t rank>
@@ -59,6 +59,9 @@ public:
     bool operator==(mdspan_iterator const& o){
         return c.data==o.c.data;
     }
+    bool operator!=(mdspan_iterator const& o){
+        return c.data!=o.c.data;
+    }
 };
 
 template<class T, size_t dim>
@@ -69,6 +72,7 @@ class mdspan{
     std::array<size_t, dim> offsets;
     T* data;
     friend class mdspan<T,dim-1>;
+    //mdspan(mdspan const&) = default;
     public:
     size_t size(size_t i){
         return sizes[i];
