@@ -74,7 +74,7 @@ class mdspan{
     friend class mdspan<T,dim-1>;
     //mdspan(mdspan const&) = default;
     public:
-    size_t size(size_t i){
+    size_t size(size_t i)const{
         return sizes[i];
     }
     mdspan& operator=(mdspan const& other){
@@ -152,15 +152,18 @@ class mdspan{
         auto idx = (((idxs+offsetbegin++)*strides++) +...+ 0);
         return data[idx];
     }
-    T& operator()(std::integral auto... idxs){
-        static_assert(sizeof...(idxs)==dim, "index count must be equal to the array dimension");
-        auto f = [i=0, this](auto a) mutable {
-            auto temp = (a+offsets[i])*strides[i];
-            i++;
-            return temp;
-        };
-        auto idx = (f(idxs) +...+ 0);
-        return data[idx];
+//    T& operator()(std::integral auto... idxs){
+//        static_assert(sizeof...(idxs)==dim, "index count must be equal to the array dimension");
+//        auto f = [i=0, this](auto a) mutable {
+//            auto temp = (a+offsets[i])*strides[i];
+//            i++;
+//            return temp;
+//        };
+//        auto idx = (f(idxs) +...+ 0);
+//        return data[idx];
+//    }
+    T& operator()(size_t idx, auto... idxs){
+        return (*this)[idx](idxs...);
     }
     mdspan subspan(std::initializer_list<size_t> starts, std::initializer_list<size_t> ends) const{
         mdspan ret;
@@ -198,7 +201,7 @@ class mdspan<T,1>{
     std::array<size_t, 1> offsets;
     T* data;
     public:
-    size_t size(size_t i){
+    size_t size(size_t i) const{
         return sizes[i];
     }
     mdspan& operator=(mdspan const& other){
@@ -233,15 +236,8 @@ class mdspan<T,1>{
         auto idx = idxs+offsets.front();
         return data[idx];
     }
-    T& operator()(std::integral auto... idxs){
-        static_assert(sizeof...(idxs)==1, "index count must be equal to the array dimension");
-        auto f = [i=0, this](auto a) mutable {
-            auto temp = (a+offsets[i])*strides[i];
-            i++;
-            return temp;
-        };
-        auto idx = (f(idxs) +...+ 0);
-        return data[idx];
+    T& operator()(size_t idx){
+        return (*this)[idx];
     }
     mdspan subspan(std::initializer_list<size_t> starts, std::initializer_list<size_t> ends){
         mdspan ret;
@@ -271,6 +267,23 @@ class mdspan<T,1>{
         return ret;
     }
 };
+
+template<class T>
+struct transpose_view{
+    T& arr;
+    size_t size(size_t idx)const{
+        return arr.size(1-idx);
+    }
+    auto& operator()(size_t a, size_t b){
+        return arr(b,a);
+    }
+    auto const& operator()(size_t a, size_t b)const{
+        return arr(b,a);
+    }
+};
+
+template<class T>
+transpose_view(T)->transpose_view<T>;
 //template<class T>
 //class mdspan<T,0>{};
 #endif //MDSPAN_HPP__
