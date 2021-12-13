@@ -146,22 +146,9 @@ class mdspan{
     mdspan<T, dim-1> operator[](size_t idx){
         return *(begin()+idx);
     }
-    T const& operator()(std::same_as<size_t> auto... idxs) const{
-        auto offsetbegin = offsets.begin();
-        auto stridebegin = strides.begin();
-        auto idx = (((idxs+offsetbegin++)*strides++) +...+ 0);
-        return data[idx];
+    T const& operator()(size_t idx, auto... idxs) const{
+        return (*this)[idx](idxs...);
     }
-//    T& operator()(std::integral auto... idxs){
-//        static_assert(sizeof...(idxs)==dim, "index count must be equal to the array dimension");
-//        auto f = [i=0, this](auto a) mutable {
-//            auto temp = (a+offsets[i])*strides[i];
-//            i++;
-//            return temp;
-//        };
-//        auto idx = (f(idxs) +...+ 0);
-//        return data[idx];
-//    }
     T& operator()(size_t idx, auto... idxs){
         return (*this)[idx](idxs...);
     }
@@ -232,9 +219,8 @@ class mdspan<T,1>{
     T const& operator[](size_t idx)const{
         return *(begin()+idx);
     }
-    T const& operator()(std::same_as<size_t> auto idxs) const{
-        auto idx = idxs+offsets.front();
-        return data[idx];
+    T const& operator()(size_t idx) const{
+        return (*this)[idx];
     }
     T& operator()(size_t idx){
         return (*this)[idx];

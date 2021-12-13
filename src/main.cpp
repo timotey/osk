@@ -1,3 +1,4 @@
+#include <ostream>
 #include<utility>
 #include<stdexcept>
 #include<iterator>
@@ -12,7 +13,6 @@
 #include<ft2build.h>
 #include FT_FREETYPE_H
 #include"gl.hpp"
-#include"algo.hpp"
 #include"mdspan.hpp"
 #include"mdvec.hpp"
 
@@ -145,7 +145,8 @@ int main(){
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
-    char a[] = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    char a[] = "0123456789abcdefghijklmnopqrstuvwxyz ,.;:?-=/'\"\t";
+    char b[] = "!@#$%^&*()ABCDEFGHIJKLMNOPQRSTUVWXYZ<>[]{}_+\\|~\n";
     const mdspan<char,2> cmap{
         .strides={1,6},
         .sizes={6,8},
@@ -153,6 +154,13 @@ int main(){
         .data=a,
     };
     auto map = make_charmap(cmap, 256);
+    const mdspan<char,2> cmap2{
+        .strides={1,6},
+        .sizes={6,8},
+        .offsets={},
+        .data=b,
+    };
+    auto map2 = make_charmap(cmap2, 256);
 
     auto fill_tex_map = [](auto&& tc, bool idx_by_x){
         for(size_t i = 0; i < tc.size(0); ++i)
@@ -186,15 +194,32 @@ int main(){
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
 
+    GLuint alt;
+    glGenTextures(1, &alt);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glBindTexture( GL_TEXTURE_2D, alt);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, int(map.size(0)), int(map.size(1)), 0, GL_ALPHA, GL_UNSIGNED_BYTE, map2.data);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+
     int gamepad;
     for(gamepad=0;gamepad < GLFW_JOYSTICK_LAST; ++gamepad)
         if (glfwJoystickIsGamepad(gamepad))break;
     
+#define FALLING(X) state.buttons[X] < old_state.buttons[X]
     glScalef(ar, 1,1);
+    GLFWgamepadstate state;
+    GLFWgamepadstate old_state;
     while(!glfwWindowShouldClose(window)){
         glfwPollEvents();
-        GLFWgamepadstate state;
+        old_state = state;
         if(glfwGetGamepadState(gamepad, &state)){
+            if(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]>0.5)
+                glBindTexture(GL_TEXTURE_2D, alt);
+            else
+                glBindTexture(GL_TEXTURE_2D, tex);
             auto left  = polar({state.axes[GLFW_GAMEPAD_AXIS_LEFT_X],  -state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]});
             auto right = polar({state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], -state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]});
             auto calc_angle = [](auto v, size_t max){
@@ -211,6 +236,10 @@ int main(){
                 glTranslated(1, 0.0, 0.0);
                 draw_pad(right.y, right.x, std::fmod(ratio_l, 1.0f), tex_coords_right[size_t(ratio_l)], tex_coords_right[(size_t(ratio_l)+1)%tex_coords_left.size(0)], left.x);
             }
+            if(FALLING(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER))
+                std::cout << (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]>0.5?cmap2:cmap)(int(ratio_r+0.5)%tex_coords_right.size(0), int(ratio_l+0.5)%tex_coords_left.size(0)) <<std::flush;
+            if(FALLING(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER))
+                std::cout << '\b';
         }else{
             gl::draw_guard d(GL_TRIANGLE_STRIP);
             glVertex3d(1.0, 1.0, 0.5);
